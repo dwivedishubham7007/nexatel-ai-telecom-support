@@ -1,0 +1,88 @@
+# ============================================================
+# NEXATEL - FILES THAT MUST NOT GO TO GITHUB
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. SECRETS / API KEYS
+# ------------------------------------------------------------
+# Our backend/.env contains NVIDIA, Gemini, OpenAI,
+# SendGrid and Twilio credentials.
+# NEVER commit this file.
+
+.env
+**/.env
+*.env
+
+# Allow a safe template containing no real credentials.
+!.env.example
+!**/.env.example
+
+
+# ------------------------------------------------------------
+# 2. PYTHON VIRTUAL ENVIRONMENTS
+# ------------------------------------------------------------
+# venv contains installed Python packages and can contain
+# thousands of files. requirements.txt represents dependencies.
+
+venv/
+**/venv/
+.venv/
+**/.venv/
+env/
+**/env/
+
+
+# ------------------------------------------------------------
+# 3. PYTHON GENERATED CACHE
+# ------------------------------------------------------------
+
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# ------------------------------------------------------------
+# 4. LOCAL RUNTIME / USER DATA
+# ------------------------------------------------------------
+# Don't upload accounts, tickets or conversations generated
+# while testing NexaTel locally.
+
+backend/data/users.json
+backend/data/support_requests.json
+
+
+# ------------------------------------------------------------
+# 5. LOGS
+# ------------------------------------------------------------
+
+*.log
+
+
+# ------------------------------------------------------------
+# 6. IDE / EDITOR FILES
+# ------------------------------------------------------------
+
+.vscode/
+.idea/
+
+
+# ------------------------------------------------------------
+# 7. OPERATING SYSTEM GENERATED FILES
+# ------------------------------------------------------------
+
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ------------------------------------------------------------
+# LOCAL DATABASE
+# ------------------------------------------------------------
+# Generated locally by NexaTel.
+# Do not commit user/test/runtime data.
+
+*.db
+*.sqlite
+*.sqlite3

@@ -1,0 +1,94 @@
+{
+  "documents": [
+    {
+      "id": "recharge_not_reflected",
+      "title": "Recharge completed but benefits not reflected",
+      "category": "recharge",
+      "content": "When a recharge is not reflected, collect the recharge amount, approximate transaction time, and whether money was actually deducted. Do not ask again for information already provided. If money was deducted but the recharge remains missing, advise the customer not to repeat the recharge and route the case for transaction-level verification."
+    },
+    {
+      "id": "payment_failed_deducted",
+      "title": "Payment failed but money deducted",
+      "category": "payments",
+      "content": "If payment appears failed but money was deducted, do not ask the customer to pay again immediately. Record the amount and time. Transaction or account verification may be required. Never claim a refund or reversal has happened unless confirmed by a real payment system."
+    },
+    {
+      "id": "duplicate_charge",
+      "title": "Duplicate recharge or duplicate charge",
+      "category": "billing",
+      "content": "For duplicate charges, capture the approximate time and amount and advise the customer not to make another payment. Duplicate-charge cases should be treated as account-specific and are appropriate for human review when the transaction cannot be verified by the chatbot."
+    },
+    {
+      "id": "refund_status",
+      "title": "Refund status",
+      "category": "billing",
+      "content": "The assistant may explain the general refund process but must not invent a refund status or expected completion date. If the customer needs the status of a specific refund, the case requires access to transaction records or human review."
+    },
+    {
+      "id": "mobile_data_not_working",
+      "title": "Mobile data not working",
+      "category": "network",
+      "content": "For mobile data issues, check whether mobile data is enabled, toggle airplane mode for about ten seconds, restart the device, and determine whether the issue is location-specific. If possible, ask whether calls and SMS are working to help separate a data-only issue from a wider network issue."
+    },
+    {
+      "id": "weak_signal",
+      "title": "Weak or no network signal",
+      "category": "network",
+      "content": "For weak or missing signal, ask whether the issue happens indoors and outdoors and whether it occurs in one location or multiple locations. Restarting the device and briefly toggling airplane mode are safe first steps. Do not promise a network outage or tower issue without network telemetry."
+    },
+    {
+      "id": "call_drops",
+      "title": "Frequent call drops",
+      "category": "network",
+      "content": "For repeated call drops, identify whether the issue affects all numbers or selected calls, whether it happens in one location, and whether mobile signal is weak. Do not claim a network fault without operational data."
+    },
+    {
+      "id": "5g_not_working",
+      "title": "5G not working",
+      "category": "network",
+      "content": "For 5G issues, confirm the device supports 5G, 5G is enabled in network settings, and the customer is in a 5G coverage area. The assistant must not claim the customer's exact coverage or plan eligibility without connected customer/network data."
+    },
+    {
+      "id": "plan_validity",
+      "title": "Plan and validity questions",
+      "category": "account",
+      "content": "The assistant may explain how plan validity and benefits generally work. It must not invent the customer's current plan, balance, data usage or expiry date. These values must come from an integrated subscriber/account API."
+    },
+    {
+      "id": "sim_lost",
+      "title": "Lost or stolen SIM",
+      "category": "sim",
+      "content": "A lost or stolen SIM can require blocking and replacement. Account-level SIM actions require identity verification. The assistant should explain next steps but never claim the SIM has been blocked or replaced unless a real telecom system confirms the operation."
+    },
+    {
+      "id": "sim_activation",
+      "title": "SIM activation or replacement SIM not active",
+      "category": "sim",
+      "content": "For SIM activation problems, confirm whether the SIM is new or replacement, whether the device detects it, and whether any network signal appears. Identity or backend provisioning checks may be required for unresolved activation issues."
+    },
+    {
+      "id": "esim_setup",
+      "title": "eSIM setup",
+      "category": "sim",
+      "content": "For eSIM setup, provide general device setup guidance and remind the customer that profile issuance or account changes may require identity verification. Never fabricate an eSIM QR code or activation confirmation."
+    },
+    {
+      "id": "international_roaming",
+      "title": "International roaming",
+      "category": "roaming",
+      "content": "For roaming issues, determine whether the customer is already abroad, whether roaming is enabled on the device, and whether calls, SMS, or data are affected. Do not invent roaming-pack eligibility, rates, or activation status without account data."
+    },
+    {
+      "id": "number_porting",
+      "title": "Mobile number porting",
+      "category": "number",
+      "content": "For number porting, explain the general process and collect where the request is currently stuck. Do not promise a completion date or claim a specific porting status without access to the number-portability system."
+    },
+    {
+      "id": "human_escalation",
+      "title": "Human support escalation policy",
+      "category": "support",
+      "content": "Human support should be used when the issue requires customer-specific transaction, billing, subscriber, SIM, or provisioning data that the AI cannot access, or when reasonable troubleshooting has failed. Callback requests enter a queue; an agent reviews the conversation before initiating a call."
+    }
+  ]
+}

@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <!--
+    Internal support-agent console.
+    This page is NOT customer-facing.
+  -->
+  <title>NexaTel Support Console</title>
+
+  <link
+    rel="stylesheet"
+    href="./support.css"
+  />
+</head>
+
+<body>
+
+  <!-- Toast notifications for success / errors -->
+  <div
+    id="toastContainer"
+    class="toast-container"
+    aria-live="polite"
+  ></div>
+
+
+  <!-- ============================================================
+       HEADER
+       ============================================================ -->
+
+  <header class="support-header">
+
+    <div class="brand">
+
+      <div class="brand-mark">
+        N
+      </div>
+
+      <div>
+
+        <strong>
+          NexaTel Support Console
+        </strong>
+
+        <span>
+          Internal agent workspace
+        </span>
+
+      </div>
+
+    </div>
+
+
+    <div class="header-actions">
+
+      <!--
+        Optional for local development.
+
+        If ADMIN_API_KEY is blank in backend/.env,
+        this may remain blank.
+
+        If ADMIN_API_KEY is configured,
+        enter the same value here.
+      -->
+
+      <input
+        id="adminKeyInput"
+        type="password"
+        placeholder="Admin API key (optional locally)"
+        autocomplete="off"
+      />
+
+
+      <button
+        id="refreshButton"
+        type="button"
+      >
+        Refresh queue
+      </button>
+
+    </div>
+
+  </header>
+
+
+  <!-- ============================================================
+       SUPPORT WORKSPACE
+       ============================================================ -->
+
+  <main class="support-layout">
+
+
+    <!-- ==========================================================
+         LEFT: SUPPORT QUEUE
+         ========================================================== -->
+
+    <aside class="queue-panel">
+
+      <div class="panel-heading">
+
+        <div>
+
+          <span class="eyebrow">
+            Queue
+          </span>
+
+          <h2>
+            Support requests
+          </h2>
+
+        </div>
+
+
+        <span
+          id="ticketCount"
+          class="count-pill"
+        >
+          0
+        </span>
+
+      </div>
+
+
+      <!--
+        IMPORTANT:
+
+        These values exactly match final main.py statuses:
+
+        waiting
+        reviewing
+        resolved
+      -->
+
+      <div class="filter-row">
+
+        <button
+          class="filter-button active"
+          data-status="all"
+          type="button"
+        >
+          All
+        </button>
+
+
+        <button
+          class="filter-button"
+          data-status="waiting"
+          type="button"
+        >
+          Waiting
+        </button>
+
+
+        <button
+          class="filter-button"
+          data-status="reviewing"
+          type="button"
+        >
+          Reviewing
+        </button>
+
+
+        <button
+          class="filter-button"
+          data-status="resolved"
+          type="button"
+        >
+          Resolved
+        </button>
+
+      </div>
+
+
+      <!-- Tickets inserted by support.js -->
+
+      <div
+        id="ticketList"
+        class="ticket-list"
+      ></div>
+
+
+      <p
+        id="emptyQueue"
+        class="empty-state"
+      >
+        No support requests found.
+      </p>
+
+    </aside>
+
+
+    <!-- ==========================================================
+         RIGHT: SELECTED TICKET
+         ========================================================== -->
+
+    <section class="detail-panel">
+
+
+      <!-- Visible before a ticket is selected -->
+
+      <div
+        id="emptyDetail"
+        class="empty-detail"
+      >
+
+        <div class="empty-icon">
+          🎧
+        </div>
+
+        <h2>
+          Select a support request
+        </h2>
+
+        <p>
+          Review the customer's issue and conversation
+          before taking any action.
+        </p>
+
+      </div>
+
+
+      <!-- Selected ticket -->
+
+      <article
+        id="ticketDetail"
+        class="ticket-detail hidden"
+      >
+
+
+        <!-- Ticket heading -->
+
+        <div class="detail-top">
+
+          <div>
+
+            <span
+              id="detailPriority"
+              class="priority-pill"
+            >
+              normal
+            </span>
+
+
+            <h1 id="detailTicketId">
+              NX-...
+            </h1>
+
+
+            <p id="detailCreatedAt"></p>
+
+          </div>
+
+
+          <span
+            id="detailStatus"
+            class="status-badge"
+          >
+            waiting
+          </span>
+
+        </div>
+
+
+        <!-- Customer details -->
+
+        <section class="customer-card">
+
+          <div>
+
+            <small>
+              Customer
+            </small>
+
+            <strong id="detailCustomerName">
+              Customer
+            </strong>
+
+          </div>
+
+
+          <div>
+
+            <small>
+              Email
+            </small>
+
+            <strong id="detailCustomerEmail">
+              —
+            </strong>
+
+          </div>
+
+
+          <div>
+
+            <small>
+              Phone
+            </small>
+
+            <strong id="detailCustomerPhone">
+              —
+            </strong>
+
+          </div>
+
+
+          <div>
+
+            <small>
+              Preferred follow-up
+            </small>
+
+            <strong id="detailPreference">
+              —
+            </strong>
+
+          </div>
+
+        </section>
+
+
+        <!-- Unresolved issue -->
+
+        <section class="reason-card">
+
+          <span class="eyebrow">
+            Unresolved issue
+          </span>
+
+          <p id="detailReason"></p>
+
+        </section>
+
+
+        <!-- Conversation transcript -->
+
+        <section class="conversation-card">
+
+          <div class="section-title">
+
+            <div>
+
+              <span class="eyebrow">
+                Context
+              </span>
+
+              <h3>
+                Conversation transcript
+              </h3>
+
+            </div>
+
+          </div>
+
+
+          <div
+            id="detailConversation"
+            class="transcript"
+          ></div>
+
+        </section>
+
+
+        <!--
+          Agent-only actions.
+
+          Review / resolve use:
+          PATCH /support/requests/{ticket_id}
+
+          Call uses:
+          POST /support/requests/{ticket_id}/call
+        -->
+
+        <section class="agent-actions">
+
+          <button
+            id="markReviewedButton"
+            class="button secondary"
+            type="button"
+          >
+            Mark reviewing
+          </button>
+
+
+          <button
+            id="callCustomerButton"
+            class="button primary"
+            type="button"
+          >
+            ☎ Call customer
+          </button>
+
+
+          <button
+            id="closeTicketButton"
+            class="button danger"
+            type="button"
+          >
+            Resolve ticket
+          </button>
+
+        </section>
+
+
+        <p class="call-note">
+          Calling is an agent-only action. A customer callback request
+          creates a queue ticket only. Twilio is triggered here after
+          the agent reviews the case.
+        </p>
+
+      </article>
+
+    </section>
+
+  </main>
+
+
+  <script src="./support.js"></script>
+
+</body>
+</html>

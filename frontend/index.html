@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="NexaTel AI-powered telecom customer support" />
+  <title>NexaTel AI Support</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <!-- Global notifications -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- ============================================================
+       AUTHENTICATION
+       ============================================================ -->
+  <section id="authScreen" class="auth-screen">
+    <div class="auth-orb orb-a"></div>
+    <div class="auth-orb orb-b"></div>
+
+    <div class="auth-layout">
+      <section class="auth-brand-panel">
+        <div class="brand">
+          <div class="brand-mark">N</div>
+          <div>
+            <div class="brand-name">NexaTel</div>
+            <div class="brand-subtitle">AI Customer Care</div>
+          </div>
+        </div>
+
+        <div class="auth-copy">
+          <span class="eyebrow">AI-powered telecom support</span>
+          <h1>Support that understands before it escalates.</h1>
+          <p>Recharge help, network troubleshooting, account support and intelligent human escalation — in one connected customer experience.</p>
+        </div>
+
+        <div class="auth-features">
+          <article><span>⚡</span><div><strong>Instant support</strong><small>Fast answers for everyday issues</small></div></article>
+          <article><span>◎</span><div><strong>Context aware</strong><small>Remembers your conversation</small></div></article>
+          <article><span>↗</span><div><strong>Smart escalation</strong><small>Human help when it matters</small></div></article>
+        </div>
+      </section>
+
+      <section class="auth-card">
+        <span class="eyebrow">Welcome</span>
+        <h2 id="authTitle">Sign in to continue</h2>
+        <p id="authDescription">Access your support conversations and account help.</p>
+
+        <form id="loginForm" class="auth-form">
+          <label class="field"><span>Email address</span><input id="loginEmail" type="email" autocomplete="email" required /></label>
+          <label class="field"><span>Password</span><div class="password-wrap"><input id="loginPassword" type="password" autocomplete="current-password" required /><button type="button" class="password-toggle" data-password-target="loginPassword">👁</button></div></label>
+          <button id="loginButton" class="button primary wide" type="submit">Sign in</button>
+          <p class="switch-copy">New to NexaTel? <button id="showSignupButton" class="link-button" type="button">Create account</button></p>
+        </form>
+
+        <form id="signupForm" class="auth-form hidden">
+          <label class="field"><span>Full name</span><input id="signupName" type="text" autocomplete="name" minlength="2" required /></label>
+          <label class="field"><span>Email address</span><input id="signupEmail" type="email" autocomplete="email" required /></label>
+          <label class="field"><span>Mobile number</span><input id="signupPhone" type="tel" autocomplete="tel" placeholder="+91XXXXXXXXXX" /></label>
+          <label class="field"><span>Create password</span><div class="password-wrap"><input id="signupPassword" type="password" autocomplete="new-password" minlength="6" required /><button type="button" class="password-toggle" data-password-target="signupPassword">👁</button></div></label>
+          <button id="signupButton" class="button primary wide" type="submit">Create account</button>
+          <p class="switch-copy">Already have an account? <button id="showLoginButton" class="link-button" type="button">Sign in</button></p>
+        </form>
+      </section>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       CUSTOMER APPLICATION
+       ============================================================ -->
+  <div id="appShell" class="app-shell hidden">
+    <!-- LEFT SIDEBAR -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand compact">
+          <div class="brand-mark">N</div>
+          <div><div class="brand-name">NexaTel</div><div class="brand-subtitle">AI Customer Care</div></div>
+        </div>
+        <button id="closeSidebarButton" class="icon-button mobile-only" type="button">✕</button>
+      </div>
+
+      <button id="newChatButton" class="new-chat-button" type="button"><span>＋</span> New conversation</button>
+      <button id="supportHomeButton" class="home-button" type="button"><span>⌂</span> Support home</button>
+
+      <div class="sidebar-label">Support</div>
+      <nav class="sidebar-actions">
+        <button type="button" data-service="recharge"><span>⚡</span> Recharge & payments</button>
+        <button type="button" data-service="network"><span>📶</span> Network & data</button>
+        <button type="button" data-service="account"><span>👤</span> Plan & account</button>
+        <button type="button" data-service="sim"><span>📱</span> SIM & eSIM</button>
+      </nav>
+
+      <section class="history-section">
+        <div class="history-heading"><span>Recent conversations</span><small id="historyCount">0/5</small></div>
+        <div id="conversationHistory" class="history-list"></div>
+        <p id="emptyHistory" class="empty-history">Your recent conversations will appear here.</p>
+      </section>
+
+      <div class="sidebar-user">
+        <div id="userAvatar" class="user-avatar">U</div>
+        <div class="user-copy"><strong id="sidebarUserName">Customer</strong><span id="sidebarUserEmail">customer@example.com</span></div>
+        <button id="logoutButton" class="icon-button" type="button" title="Sign out">↪</button>
+      </div>
+    </aside>
+
+    <!-- MAIN COLUMN -->
+    <main class="main-area">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="openSidebarButton" class="icon-button mobile-only" type="button">☰</button>
+          <div>
+            <div class="title-row"><h2 id="conversationTitle">AI Support</h2><span class="online-pill"><i></i> Online</span></div>
+            <p id="conversationSubtitle">Usually replies instantly</p>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <button id="notificationButton" class="notification-button" type="button" aria-label="Notifications" title="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8C6 15 3 15 3 17H21C21 15 18 15 18 8Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.73 21C13.35 21.62 12.72 22 12 22C11.28 22 10.65 21.62 10.27 21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span class="notification-badge">3</span>
+          </button>
+          <button id="supportReviewButton" class="button secondary hidden" type="button">🎧 Support review</button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <!-- ========================================================
+             HOME VIEW — remains fully accessible via Support home
+             ======================================================== -->
+        <section id="homeView" class="home-view">
+          <div class="home-scroll">
+            <div class="home-grid">
+              <div class="home-main">
+                <section class="hero-row">
+                  <div class="hero-copy-block">
+                    <h1>Hello, <span id="welcomeCustomerName">Customer</span>! 👋</h1>
+                    <p>I'm your NexaTel AI assistant. I can help you with recharge, plans, network issues and much more.</p>
+                    <div class="trust-row">
+                      <div><span class="round-icon blue">✧</span><p><strong>Instant replies</strong><small>Get answers in seconds</small></p></div>
+                      <div><span class="round-icon orange">🔒</span><p><strong>Secure & private</strong><small>Your data is protected</small></p></div>
+                      <div><span class="round-icon pink">◷</span><p><strong>24/7 available</strong><small>Day or night, we're here</small></p></div>
+                    </div>
+                  </div>
+
+                  <!-- CSS-drawn assistant: no external image dependency. -->
+                  <div class="assistant-art" aria-hidden="true">
+                    <div class="art-orbit"><span class="spark one">✦</span><span class="spark two">✦</span><div class="bot"><i class="antenna"></i><div class="bot-head"><div class="bot-face"><b></b><b></b></div></div><div class="bot-body"></div></div><div class="chat-dot">•••</div></div>
+                  </div>
+                </section>
+
+                <section class="service-section">
+                  <h2>What can we help you with today?</h2>
+                  <p>Choose a topic or describe your issue. I'll guide you step-by-step.</p>
+
+                  <div class="service-grid">
+                    <button class="service-card" type="button" data-service="recharge"><span class="service-icon recharge">⚡</span><strong>Recharge & payments</strong><small>Recharge, payment issues, transaction failures</small><i>→</i></button>
+                    <button class="service-card" type="button" data-service="network"><span class="service-icon network">📶</span><strong>Network & data</strong><small>Slow internet, no signal, call drops, data not working</small><i>→</i></button>
+                    <button class="service-card" type="button" data-service="account"><span class="service-icon plan">▣</span><strong>Plan & validity</strong><small>Current plan, validity, plan change or extension</small><i>→</i></button>
+                    <button class="service-card" type="button" data-service="billing"><span class="service-icon billing">▤</span><strong>Billing & refunds</strong><small>Bills, refunds, overcharges, payment disputes</small><i>→</i></button>
+                    <button class="service-card" type="button" data-service="sim"><span class="service-icon sim">▦</span><strong>SIM & eSIM</strong><small>SIM blocked, replacement, eSIM activation</small><i>→</i></button>
+                    <button class="service-card" type="button" data-service="roaming"><span class="service-icon roaming">✈</span><strong>Roaming & ISD</strong><small>International roaming, ISD packs, global services</small><i>→</i></button>
+                    <button class="service-card" type="button" data-service="number"><span class="service-icon number">☎</span><strong>Number services</strong><small>Porting, number change, forwarding and DND</small><i>→</i></button>
+                    <button class="service-card" type="button" data-service="other"><span class="service-icon other">●</span><strong>Other support</strong><small>Device help, app issues and more</small><i>→</i></button>
+                  </div>
+                </section>
+
+                <section class="popular-section">
+                  <h3>Popular right now</h3>
+                  <div class="popular-pills">
+                    <button type="button" data-prompt="My recharge failed but the amount was deducted.">⌕ Recharge failed but amount deducted</button>
+                    <button type="button" data-prompt="My internet is not working.">⌕ Internet not working</button>
+                    <button type="button" data-prompt="I need help with my plan validity extension.">⌕ Plan validity extension</button>
+                    <button type="button" data-prompt="I want to check my refund status.">⌕ Refund status</button>
+                    <button type="button" data-prompt="My SIM is not working.">⌕ SIM not working</button>
+                  </div>
+                </section>
+
+                <!-- Contextual guidance is available on home before sending. -->
+                <section id="guidedPanel" class="guided-panel hidden">
+                  <div><span class="eyebrow">Selected service</span><h3 id="guidedTitle"></h3><p id="guidedDescription"></p></div>
+                  <button id="closeGuidedPanel" class="icon-button" type="button">✕</button>
+                  <div id="guidedSuggestions" class="guided-suggestions"></div>
+                </section>
+              </div>
+
+              <!-- RIGHT CUSTOMER UTILITY RAIL -->
+              <aside class="right-rail">
+                <section class="right-card account-card">
+                  <div class="right-card-head"><h3>Account overview</h3><button id="viewAccountButton" type="button">View all</button></div>
+                  <div class="account-row"><span class="account-icon">☎</span><div><small>Mobile number</small><strong id="accountMobileNumber">+91 98765 43210</strong></div></div>
+                  <div class="account-row"><span class="account-icon">▣</span><div><small>Plan</small><strong>Unlimited Pro 499</strong></div></div>
+                  <div class="account-row"><span class="account-icon">◷</span><div class="grow"><small>Data left</small><div class="between"><strong>12.4 GB / 50 GB</strong><small>24%</small></div><div class="progress"><i></i></div></div></div>
+                  <div class="account-row"><span class="account-icon">◫</span><div><small>Validity</small><strong>12 Aug 2026</strong></div></div>
+                  <div class="account-row"><span class="account-icon">₹</span><div><small>Balance</small><strong>₹149.50</strong></div></div>
+                  <button id="rechargeNowButton" class="button primary recharge-button" type="button">Recharge now</button>
+                  <p class="demo-note">Prototype account data until a telecom customer API is connected.</p>
+                </section>
+
+                <section class="right-card human-card">
+                  <h3>Need human help?</h3>
+                  <p>If your issue is not resolved, support review becomes available after meaningful troubleshooting.</p>
+                  <button id="homeSupportButton" class="support-preview-button" type="button" disabled>🎧 Request Support Review</button>
+                  <div class="followup-preview"><div><span>☎</span><p><strong>Callback</strong><small>Agent reviews first</small></p></div><div><span>✉</span><p><strong>Email</strong><small>We'll email you</small></p></div></div>
+                </section>
+
+                <section class="right-card safety-card">
+                  <h3>Tips & safety</h3>
+                  <p>✓ We'll never ask for OTP or passwords</p>
+                  <p>✓ Verify transactions on official channels</p>
+                  <p>✓ Keep personal data safe</p>
+                </section>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================
+             CHAT VIEW — does NOT destroy access to customer services
+             ======================================================== -->
+        <section id="chatView" class="chat-view hidden">
+          <!-- Compact service toolbar keeps core customer options usable in chat. -->
+          <div class="chat-tools">
+            <button id="backHomeButton" class="back-home-button" type="button">← Support home</button>
+            <div class="chat-service-strip">
+              <button type="button" data-service="recharge">⚡ Recharge</button>
+              <button type="button" data-service="network">📶 Network</button>
+              <button type="button" data-service="account">▣ Plan</button>
+              <button type="button" data-service="billing">▤ Billing</button>
+              <button type="button" data-service="sim">▦ SIM</button>
+              <button type="button" data-service="roaming">✈ Roaming</button>
+              <button type="button" data-service="number">☎ Number</button>
+              <button type="button" data-service="other">● Other</button>
+            </div>
+          </div>
+
+          <div id="messagesContainer" class="messages-container">
+            <div id="messagesList" class="messages-list"></div>
+            <div id="typingIndicator" class="typing-row hidden"><div class="assistant-avatar">✦</div><div class="typing-bubble"><span></span><span></span><span></span></div></div>
+          </div>
+        </section>
+
+        <!-- Composer belongs to BOTH modes and always stays fully visible. -->
+        <div class="composer-zone">
+          <div id="composerContext" class="context-chip hidden"><span id="composerContextText"></span><button id="clearContextButton" type="button">✕</button></div>
+          <form id="chatForm" class="composer">
+            <textarea id="messageInput" rows="1" maxlength="2000" placeholder="Describe what you need help with..." required></textarea>
+            <button id="sendButton" class="send-button" type="submit" aria-label="Send message">➤</button>
+          </form>
+          <div class="composer-meta"><span>AI responses may need verification for account-specific transactions.</span><span id="characterCounter">0 / 2000</span></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ============================================================
+       HUMAN SUPPORT MODAL
+       ============================================================ -->
+  <div id="supportModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <section class="modal-card">
+      <div class="modal-head"><div><span class="eyebrow">Human support</span><h2>Request support review</h2></div><button id="closeSupportModalButton" class="icon-button" type="button">✕</button></div>
+      <p class="modal-description">Your conversation is sent to a support agent for review before any callback or email follow-up.</p>
+      <form id="supportRequestForm">
+        <label class="field"><span>What still needs help?</span><textarea id="supportReason" rows="4" maxlength="800" required></textarea></label>
+        <div class="field"><span>Preferred follow-up</span>
+          <label class="choice-card"><input type="radio" name="contactPreference" value="callback" checked /><span><strong>Request a callback</strong><small>An agent reviews the case first. This does not start an immediate call.</small></span></label>
+          <label class="choice-card"><input type="radio" name="contactPreference" value="email" /><span><strong>Email response</strong><small>Receive support updates at your registered email.</small></span></label>
+        </div>
+        <div class="info-box"><span>ℹ</span><p>Customer requests enter a support queue. Phone calls can only be started later by a support agent.</p></div>
+        <button id="submitSupportButton" class="button primary wide" type="submit">Submit request</button>
+      </form>
+    </section>
+  </div>
+
+  <div id="supportSuccessModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <section class="modal-card small-modal success-modal"><div class="success-icon">✓</div><h2>Request received</h2><p id="supportSuccessMessage"></p><div id="supportTicketReference" class="ticket-reference hidden"></div><button id="closeSuccessModalButton" class="button primary wide" type="button">Continue</button></section>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <!-- =====================================================
+         BASIC SETTINGS
+    ====================================================== -->
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Telecom Assist - Support Dashboard
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="styles.css"
+    >
+
+</head>
+
+
+<body class="dashboard-body">
+
+
+    <!-- =====================================================
+         MAIN DASHBOARD CONTAINER
+    ====================================================== -->
+
+    <div class="dashboard-container">
+
+
+        <!-- =================================================
+             DASHBOARD HEADER
+        ================================================== -->
+
+        <header class="dashboard-header">
+
+
+            <div>
+
+                <p class="nav-section-title">
+                    SUPPORT OPERATIONS
+                </p>
+
+                <h1>
+                    Support Dashboard
+                </h1>
+
+                <p>
+                    Internal view of AI tickets,
+                    escalations and support activity.
+                </p>
+
+            </div>
+
+
+            <!-- Return to customer interface -->
+            <a
+                href="index.html"
+                class="back-link"
+            >
+                ← Customer Support
+            </a>
+
+
+        </header>
+
+
+
+        <!-- =================================================
+             KPI / SUMMARY CARDS
+        ================================================== -->
+
+        <section class="stats-grid">
+
+
+            <!-- Total tickets -->
+            <div class="stat-card">
+
+                <span>
+                    Total Tickets
+                </span>
+
+                <strong id="totalTickets">
+                    0
+                </strong>
+
+            </div>
+
+
+            <!-- Human escalations -->
+            <div class="stat-card">
+
+                <span>
+                    Escalated
+                </span>
+
+                <strong id="escalatedTickets">
+                    0
+                </strong>
+
+            </div>
+
+
+            <!-- Escalation percentage -->
+            <div class="stat-card">
+
+                <span>
+                    Escalation Rate
+                </span>
+
+                <strong id="escalationRate">
+                    0%
+                </strong>
+
+            </div>
+
+
+            <!-- Critical queue -->
+            <div class="stat-card">
+
+                <span>
+                    Critical Tickets
+                </span>
+
+                <strong id="criticalTickets">
+                    0
+                </strong>
+
+            </div>
+
+
+        </section>
+
+
+
+        <!-- =================================================
+             CATEGORY BREAKDOWN
+        ================================================== -->
+
+        <section class="dashboard-panel">
+
+
+            <h3>
+                Ticket Categories
+            </h3>
+
+
+            <!--
+                dashboard.js dynamically creates
+                one card for every category.
+            -->
+            <div
+                id="categoryStats"
+                class="quick-actions"
+            >
+            </div>
+
+
+        </section>
+
+
+
+        <!-- =================================================
+             TICKET TABLE
+        ================================================== -->
+
+        <section class="dashboard-panel">
+
+
+            <h3>
+                Recent Support Tickets
+            </h3>
+
+
+            <div class="table-container">
+
+
+                <table>
+
+
+                    <thead>
+
+                        <tr>
+
+                            <th>
+                                Ticket
+                            </th>
+
+                            <th>
+                                Category
+                            </th>
+
+                            <th>
+                                Priority
+                            </th>
+
+                            <th>
+                                Confidence
+                            </th>
+
+                            <th>
+                                Escalated
+                            </th>
+
+                            <th>
+                                Customer Issue
+                            </th>
+
+                            <th>
+                                Created
+                            </th>
+
+                        </tr>
+
+                    </thead>
+
+
+                    <!--
+                        dashboard.js inserts ticket rows here.
+                    -->
+                    <tbody
+                        id="ticketTable"
+                    >
+                    </tbody>
+
+
+                </table>
+
+
+            </div>
+
+
+        </section>
+
+
+    </div>
+
+
+    <!-- Dashboard JavaScript -->
+    <script src="dashboard.js"></script>
+
+
+</body>
+
+</html>
