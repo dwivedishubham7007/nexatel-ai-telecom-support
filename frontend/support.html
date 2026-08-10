@@ -310,7 +310,9 @@
           </div>
 
 
-          <div>
+          <div><small>Channel</small><strong id="detailChannel">Chat</strong></div>
+
+                    <div>
 
             <small>
               Preferred follow-up
@@ -321,6 +323,8 @@
             </strong>
 
           </div>
+
+          <div><small>CRM sync</small><strong id="detailCrmStatus">Internal queue</strong></div>
 
         </section>
 
@@ -337,6 +341,17 @@
 
         </section>
 
+
+        <!-- AI HANDOFF SUMMARY -->
+        <section class="summary-card">
+          <div class="section-title"><div><span class="eyebrow">AI handoff</span><h3>Case summary</h3></div><span id="detailSummaryChannel" class="channel-badge">Chat</span></div>
+          <div class="summary-grid">
+            <div class="summary-block"><small>Issue</small><strong id="detailSummaryIssue">—</strong></div>
+            <div class="summary-block"><small>Escalation reason</small><p id="detailEscalationReason">—</p></div>
+            <div class="summary-block summary-wide"><small>Known facts</small><ul id="detailKnownFacts" class="known-facts"></ul></div>
+            <div class="summary-block summary-wide"><small>Recommended agent action</small><p id="detailRecommendedAction">—</p></div>
+          </div>
+        </section>
 
         <!-- Conversation transcript -->
 

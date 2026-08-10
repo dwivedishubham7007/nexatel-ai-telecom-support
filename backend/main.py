@@ -1,5 +1,5 @@
 # =============================================================================
-# NEXATEL AI TELECOM SUPPORT - FINAL BACKEND
+# NEXATEL AI TELECOM SUPPORT - FINAL BACKEND 7.1
 # =============================================================================
 # Provider priority: NVIDIA -> Gemini -> OpenAI -> deterministic fallback
 # RAG: NVIDIA Nemotron-3-Embed-1B primary embeddings + local sentence-transformers fallback + FAISS
@@ -26,6 +26,8 @@ import numpy as np
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
+
+from crm_adapter import create_or_sync_crm_ticket, crm_is_configured
 
 # -----------------------------------------------------------------------------
 # Environment loading
@@ -119,7 +121,13 @@ NVIDIA_EMBEDDING_MODEL = os.getenv(
 
 # Provider fallbacks for response generation.
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip()
+
+# Older NexaTel .env files used gemini-2.5-flash. Google now recommends
+# gemini-3.6-flash as its replacement, so migrate the legacy value in-memory
+# without forcing the local .env file to be edited immediately.
+if GEMINI_MODEL in {"gemini-2.5-flash", "models/gemini-2.5-flash"}:
+    GEMINI_MODEL = "gemini-3.6-flash"
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip()
@@ -216,7 +224,7 @@ def write_json_list(path: Path, value: List[Dict[str, Any]]) -> None:
 # =============================================================================
 app = FastAPI(
     title="NexaTel AI Telecom Support API",
-    version="6.1.0",
+    version="7.1.0",
     description="Context-aware telecom support with vector RAG and human escalation.",
 )
 
@@ -257,6 +265,16 @@ class ChatRequest(BaseModel):
     user_id: Optional[str] = None
     user_email: Optional[str] = None
     topic: Optional[str] = None
+    channel: str = Field(default="chat", max_length=20)
+
+
+class VoiceChatRequest(BaseModel):
+    """Voice request after ASR converts customer speech into text."""
+    transcript: str = Field(..., min_length=1, max_length=2000)
+    session_id: str = Field(..., min_length=1, max_length=200)
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+    topic: Optional[str] = None
 
 
 class ConversationMessage(BaseModel):
@@ -274,6 +292,7 @@ class SupportRequest(BaseModel):
     customer_phone: Optional[str] = None
     reason: str = Field(..., min_length=2, max_length=800)
     contact_preference: str = "callback"
+    channel: str = Field(default="chat", max_length=20)
     conversation: List[ConversationMessage] = Field(default_factory=list)
 
 
@@ -839,17 +858,36 @@ def extract_amount(message: str, intent: Optional[str]) -> Optional[float]:
 
 
 def extract_time_phrase(message: str) -> Optional[str]:
-    lower = message.lower()
+    """Extract an approximate transaction time from a short customer reply."""
+    lower = message.lower().strip()
+
     candidates = [
-        "today morning", "this morning", "today afternoon", "this afternoon",
-        "today evening", "this evening", "last night", "yesterday morning",
-        "yesterday", "today", "just now", "a few minutes ago", "an hour ago",
+        "today morning", "this morning",
+        "today afternoon", "this afternoon",
+        "today evening", "this evening",
+        "last night",
+        "yesterday morning", "yesterday afternoon", "yesterday evening",
+        "yesterday", "today", "just now",
+        "a few minutes ago", "an hour ago",
     ]
+
     for phrase in candidates:
         if phrase in lower:
             return phrase
-    return None
 
+    # Also understand concise replies such as:
+    #   8 AM
+    #   8:30 pm
+    #   20:15
+    clock_match = re.search(
+        r"\b(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)?\b",
+        lower,
+        flags=re.IGNORECASE,
+    )
+    if clock_match:
+        return clock_match.group(0).strip()
+
+    return None
 
 def interpret_yes_no(message: str) -> Optional[bool]:
     normalized = re.sub(r"[^a-z]", "", message.lower())
@@ -861,58 +899,119 @@ def interpret_yes_no(message: str) -> Optional[bool]:
 
 
 def update_issue_state(session_id: str, message: str, topic: Optional[str]) -> Dict[str, Any]:
+    """
+    Update structured facts independently from the LLM.
+
+    This is what lets NexaTel understand short follow-ups such as "₹500",
+    "yes" and "8 AM" without asking the customer to repeat information.
+    """
     state = issue_state_store.setdefault(session_id, default_issue_state())
     state["turns"] += 1
 
     state["intent"] = detect_intent(message, topic, state.get("intent"))
     lower = message.lower()
 
+    # Amount: works both in full sentences and short recharge-flow replies.
     amount = extract_amount(message, state.get("intent"))
     if amount is not None:
         state["amount"] = amount
 
+    # Approximate time: includes natural phrases and clock times such as 8 AM.
     time_phrase = extract_time_phrase(message)
     if time_phrase:
         state["transaction_time"] = time_phrase
 
+    # Contextual yes/no answers are interpreted using the last question type.
     yes_no = interpret_yes_no(message)
     if yes_no is not None and state.get("last_question") == "money_deducted":
         state["money_deducted"] = yes_no
 
-    if any(x in lower for x in ["money deducted", "amount deducted", "payment deducted", "debited", "money was deducted"]):
+    # Explicit payment-deduction signals.
+    if any(
+        phrase in lower
+        for phrase in [
+            "money deducted",
+            "amount deducted",
+            "payment deducted",
+            "money was deducted",
+            "amount was deducted",
+            "payment was deducted",
+            "was deducted",
+            "debited",
+        ]
+    ):
         state["money_deducted"] = True
 
-    if any(x in lower for x in ["recharge not reflecting", "not reflected", "not showing", "benefits not active", "recharge failed"]):
+    # Common ways customers describe a recharge that has not arrived.
+    if any(
+        phrase in lower
+        for phrase in [
+            "recharge not reflecting",
+            "recharge isn't reflecting",
+            "recharge is not reflecting",
+            "not reflected",
+            "not showing",
+            "not credited",
+            "not received",
+            "recharge missing",
+            "benefits not active",
+            "recharge failed",
+            "recharge not working",
+            "recharge isn't working",
+            "recharge is not working",
+        ]
+    ):
         state["recharge_reflected"] = False
 
-    if any(x in lower for x in ["recharge reflected", "now reflected", "now working", "resolved"]):
+    if any(
+        phrase in lower
+        for phrase in [
+            "recharge reflected",
+            "now reflected",
+            "recharge credited",
+            "now credited",
+            "now working",
+            "resolved",
+        ]
+    ):
         state["recharge_reflected"] = True
 
-    # If the user says "I need recharge to reflect", treat that as not reflected.
+    # "I still need the recharge to reflect" also means it is currently absent.
     if state.get("intent") == "recharge_issue" and "reflect" in lower and "not" not in lower:
-        if any(x in lower for x in ["need", "want", "still"]):
+        if any(phrase in lower for phrase in ["need", "want", "still"]):
             state["recharge_reflected"] = False
 
-    # Transaction verification becomes appropriate when money was deducted but
-    # the recharge is still missing.
+    # Account/transaction verification is conceptually required once we know
+    # money was deducted while the recharge is still missing.
     state["requires_account_verification"] = bool(
         state.get("intent") == "recharge_issue"
         and state.get("money_deducted") is True
         and state.get("recharge_reflected") is False
     )
 
-    # Eligibility is deliberately meaningful, not instant.
-    state["escalation_eligible"] = bool(
+    # Human review should not become an instant shortcut. For the standard
+    # deducted-but-not-credited flow, collect amount + approximate time first.
+    transaction_context_ready = bool(
         state["requires_account_verification"]
-        or (
+        and state.get("amount") is not None
+        and state.get("transaction_time")
+    )
+
+    if state["requires_account_verification"]:
+        # For a deducted-but-missing recharge, do not expose human review until
+        # the key transaction facts are ready for the agent handoff.
+        state["escalation_eligible"] = transaction_context_ready
+    else:
+        # Other unresolved billing/recharge conversations can become eligible
+        # after several turns even when they do not match the strict transaction
+        # verification state machine above.
+        state["escalation_eligible"] = bool(
             state.get("intent") in {"recharge_issue", "billing_issue"}
             and state.get("turns", 0) >= 3
         )
-    )
 
     issue_state_store[session_id] = state
     return state
-
 
 def known_facts_text(state: Dict[str, Any]) -> str:
     facts = []
@@ -935,10 +1034,10 @@ def known_facts_text(state: Dict[str, Any]) -> str:
 
 def deterministic_context_response(state: Dict[str, Any]) -> Optional[str]:
     """
-    High-confidence state machine for the recharge-not-reflected scenario.
+    High-confidence state machine for a recharge that is not credited.
 
-    This prevents the exact failure seen in testing: asking again for amount/time
-    that the user has already supplied.
+    It deliberately asks ONE thing at a time and prevents the model from
+    producing checklist-style support responses for this common workflow.
     """
     if state.get("intent") != "recharge_issue":
         return None
@@ -948,29 +1047,49 @@ def deterministic_context_response(state: Dict[str, Any]) -> Optional[str]:
     reflected = state.get("recharge_reflected")
     deducted = state.get("money_deducted")
 
-    if reflected is False and amount is not None and when and deducted is None:
+    # Only take deterministic control once the customer has indicated that the
+    # recharge is missing/not working. Other recharge questions can still use RAG.
+    if reflected is not False:
+        return None
+
+    # Step 1: amount.
+    if amount is None:
+        state["last_question"] = "amount"
+        return "I can help with that. What was the recharge amount?"
+
+    amount_display = int(amount) if float(amount).is_integer() else amount
+
+    # If the amount is known but deduction status is not, ask only that next.
+    if deducted is None:
         state["last_question"] = "money_deducted"
-        amount_display = int(amount) if float(amount).is_integer() else amount
         return (
-            f"I understand. Your ₹{amount_display} recharge from {when} still hasn’t reflected. "
-            "Please don’t recharge again for now. Was the amount successfully deducted from your bank, card or UPI account?"
+            f"Thanks. Was the ₹{amount_display} amount successfully deducted "
+            "from your bank, card or UPI account?"
         )
 
-    if reflected is False and deducted is True:
+    # Deduction confirmed, now collect time if it is still missing.
+    if deducted is True and not when:
+        state["last_question"] = "transaction_time"
+        return "About when did you make the recharge? For example, today around 8 AM."
+
+    # We now have the key transaction facts. Human review can be offered.
+    if deducted is True and when:
         state["last_question"] = None
-        amount_text = "the recharge amount"
-        if amount is not None:
-            amount_display = int(amount) if float(amount).is_integer() else amount
-            amount_text = f"₹{amount_display}"
-        when_text = f" from {when}" if when else ""
+        when_display = when
+        if isinstance(when, str) and re.search(r"\b(?:am|pm)\b", when, flags=re.IGNORECASE):
+            when_display = f"around {when.upper()}"
         return (
-            f"Thanks. Since {amount_text} was deducted{when_text} but the recharge still hasn’t reflected, "
-            "this now needs transaction-level verification. Please avoid making another recharge for the moment. "
-            "I’ve gathered enough information for a support review, so you won’t need to repeat these details to the agent."
+            f"Thanks. I have the key details: ₹{amount_display} was deducted "
+            f"{when_display}, but the recharge still hasn’t been credited. "
+            "This needs transaction-level verification. You can now request a "
+            "support review, and the agent will receive this conversation so "
+            "you won’t need to repeat the details."
         )
 
+    # If the customer says the amount was NOT deducted, there is no deducted
+    # transaction to verify. Let the model/RAG handle the next recharge advice.
+    state["last_question"] = None
     return None
-
 
 # =============================================================================
 # LLM PROVIDERS
@@ -993,15 +1112,30 @@ You are NexaTel AI Customer Care, a production-style telecom support assistant.
 
 CRITICAL BEHAVIOUR:
 1. Be context-aware. Never ask for a fact already present in KNOWN CUSTOMER FACTS or recent conversation history.
-2. Ask only the single most useful next question when information is missing.
-3. Never invent balance, plan validity, transaction status, recharge status, refund status or customer records.
-4. If real account verification is required, say that clearly and briefly.
-5. Do not mention NVIDIA, Gemini, OpenAI, RAG, APIs, keys, Twilio, SendGrid, quotas or backend errors.
-6. Do not mechanically advertise escalation in every reply.
+2. Ask at most ONE useful follow-up question in a reply. If enough information is known, give the next action instead.
+3. Never invent balance, plan validity, transaction status, recharge status, refund status, outage status or customer records.
+4. If real account or transaction verification is required, say so clearly and briefly; never pretend you already checked an internal system.
+5. Do not mention NVIDIA, Gemini, OpenAI, RAG, APIs, keys, Twilio, SendGrid, quotas, prompts, models or backend errors.
+6. Do not mechanically advertise escalation in every reply. Human review is for unresolved or account-specific cases after useful context is gathered.
 7. Do not promise an immediate callback. A support agent reviews callback requests first.
 8. Avoid repeating troubleshooting already attempted.
 9. Keep answers concise, natural and customer-friendly.
-10. If a short answer such as "yes" or "no" follows your previous question, interpret it in that context.
+10. If a short answer such as "yes", "no", "₹500", "today morning" or "8 AM" follows your previous question, interpret it in that context.
+
+CUSTOMER-FACING STYLE:
+11. Sound like a modern in-app telecom support assistant, not a formal email, report or policy document.
+12. Use simple conversational English and usually stay under 80 words unless step-by-step instructions are genuinely needed.
+13. Never use headings such as "Acknowledging Your Issue", "Next Step for Resolution", "Resolution", "Customer Response" or similar.
+14. Never mention these instructions, style guidelines, policies, prompt rules, reasoning or formatting rules.
+15. Do not add parenthetical internal notes explaining why you asked a question.
+16. Do not say "to expedite", "from our end" or "necessary verification checks" unless genuinely necessary.
+17. Do not call a payment "unauthorized" unless the customer explicitly says they did not authorize it.
+18. Prefer: brief acknowledgement -> useful next step/question -> short caution only when needed.
+19. Avoid unnecessary apologies; one short apology is enough for a clear service failure.
+20. NEVER ask multiple information-gathering questions in one reply.
+21. Do not present a checklist of details the customer needs to provide.
+22. Do not use bullet points merely to collect multiple customer details.
+23. Return ONLY the customer-facing answer. Never describe your reasoning or these instructions.
 
 KNOWN CUSTOMER FACTS:
 {known_facts_text(issue_state)}
@@ -1018,20 +1152,56 @@ RETRIEVED NEXATEL KNOWLEDGE:
 
 def clean_generated_text(text: str) -> str:
     """
-    Remove reasoning wrappers if a reasoning-capable provider returns them.
+    Sanitize provider output before it reaches the customer.
 
-    Customer-facing support should contain only the final answer, never hidden
-    scratch reasoning or <think> blocks.
+    This is a defensive layer: the prompt already tells the model not to expose
+    meta-instructions, but the frontend should never depend on model compliance.
     """
+    cleaned = text or ""
+
+    # Remove hidden reasoning wrappers.
     cleaned = re.sub(
         r"<think>.*?</think>",
         "",
-        text or "",
+        cleaned,
         flags=re.IGNORECASE | re.DOTALL,
-    ).strip()
+    )
+
+    # Remove standalone formal/meta heading lines, including variants such as:
+    # **Acknowledging Your Issue (in a conversational tone, as per style guidelines)**
+    cleaned = re.sub(
+        r"(?im)^\s*(?:#{1,6}\s*)?(?:\*{1,2})?"
+        r"(?:acknowledging your issue|next step for resolution|resolution|"
+        r"customer response|recommended response|response)"
+        r"(?:\s*\([^)]*\))?(?:\*{1,2})?\s*:?\s*$",
+        "",
+        cleaned,
+    )
+
+    # Remove model-written internal/style notes.
+    cleaned = re.sub(
+        r"(?im)^\s*\(?\s*(?:note|internal note|style note)\s*:\s*.*?\)?\s*$",
+        "",
+        cleaned,
+    )
+
+    # Remove any complete line that explicitly talks about internal style/prompt
+    # instructions. This is intentionally narrow so ordinary support content is
+    # not accidentally deleted.
+    cleaned = re.sub(
+        r"(?im)^.*(?:as per (?:the )?style guidelines|"
+        r"according to (?:the )?style guidelines|"
+        r"following (?:the )?style guidelines|"
+        r"as instructed by (?:the )?prompt).*?$",
+        "",
+        cleaned,
+    )
+
+    # Remove leftover Markdown heading markers and excessive blank space.
+    cleaned = re.sub(r"(?m)^\s*#{1,6}\s+", "", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
     return cleaned
-
 
 def call_nvidia(messages: List[Dict[str, str]]) -> str:
     """
@@ -1095,7 +1265,7 @@ def call_nvidia(messages: List[Dict[str, str]]) -> str:
 
         # Support answers should remain concise even though the model supports
         # a much larger context/output window.
-        max_tokens=700,
+        max_tokens=350,
 
         frequency_penalty=0,
         presence_penalty=0,
@@ -1135,7 +1305,7 @@ def call_gemini(system: str, messages: List[Dict[str, str]]) -> str:
     text = getattr(response, "text", None)
     if not text or not text.strip():
         raise RuntimeError("Gemini returned an empty response")
-    return text.strip()
+    return clean_generated_text(text)
 
 
 def call_openai(messages: List[Dict[str, str]]) -> str:
@@ -1227,6 +1397,43 @@ def generate_response(
 
 
 # =============================================================================
+# OMNICHANNEL / AGENT HANDOFF HELPERS
+# =============================================================================
+def sanitize_channel(channel: Optional[str]) -> str:
+    value=(channel or "chat").strip().lower()
+    return value if value in {"chat","voice"} else "chat"
+
+def infer_ticket_issue(text: str) -> str:
+    lower=text.lower()
+    if any(x in lower for x in ["recharge","top up","top-up"]): return "Recharge / payment"
+    if any(x in lower for x in ["network","signal","internet","data","4g","5g"]): return "Network / data"
+    if any(x in lower for x in ["refund","billing","bill","charged","payment"]): return "Billing / refund"
+    if any(x in lower for x in ["sim","esim"]): return "SIM / eSIM"
+    if any(x in lower for x in ["roaming","isd","international"]): return "Roaming / ISD"
+    if any(x in lower for x in ["plan","validity","balance"]): return "Plan / account"
+    return "General support"
+
+def build_agent_case_summary(request: SupportRequest, issue_state: Optional[Dict[str,Any]]) -> Dict[str,Any]:
+    state=issue_state or {}
+    transcript=" ".join(x.content for x in request.conversation if x.content)
+    known=[]
+    if state.get("amount") is not None:
+        amount=state["amount"]; display=int(amount) if float(amount).is_integer() else amount
+        known.append(f"Amount: ₹{display}")
+    if state.get("transaction_time"): known.append(f"Transaction time: {state['transaction_time']}")
+    if state.get("money_deducted") is True: known.append("Payment was deducted")
+    elif state.get("money_deducted") is False: known.append("Payment was not deducted")
+    if state.get("recharge_reflected") is False: known.append("Recharge / benefit is not reflected")
+    if state.get("requires_account_verification"):
+        reason="Account or transaction-level verification is required."
+        action="Verify the account/transaction in the CRM or billing system, then continue from the captured AI context without asking the customer to repeat the issue."
+    else:
+        reason=request.reason.strip()
+        action="Review the transcript, verify account-specific details in the system of record, and continue from where AI troubleshooting stopped."
+    return {"issue":infer_ticket_issue(f"{request.reason} {transcript}"),"summary":request.reason.strip(),"known_facts":known,"escalation_reason":reason,"recommended_action":action,"channel":sanitize_channel(request.channel)}
+
+
+# =============================================================================
 # SUPPORT / EMAIL / TWILIO HELPERS
 # =============================================================================
 def model_to_dict(model: BaseModel) -> Dict[str, Any]:
@@ -1301,8 +1508,28 @@ def twilio_is_configured() -> bool:
     )
 
 
+def normalize_phone_number(phone: Optional[str]) -> str:
+    """
+    Normalize common formatting without guessing a country code.
+
+    Example:
+        +91 88876 74925  -> +918887674925
+
+    If the customer enters a local number without a leading +country-code, we
+    keep it as-is so the application does not silently guess the wrong country.
+    """
+    value = (phone or "").strip()
+    if not value:
+        return ""
+
+    # Remove spaces, dashes and parentheses only.
+    compact = re.sub(r"[\s\-()]", "", value)
+    return compact
+
+
 def valid_e164_phone(phone: Optional[str]) -> bool:
-    return bool(phone and re.fullmatch(r"\+[1-9]\d{7,14}", phone.strip()))
+    normalized = normalize_phone_number(phone)
+    return bool(re.fullmatch(r"\+[1-9]\d{7,14}", normalized))
 
 
 def verify_admin_access(supplied_key: Optional[str]) -> None:
@@ -1321,7 +1548,7 @@ def verify_admin_access(supplied_key: Optional[str]) -> None:
 def root() -> Dict[str, Any]:
     return {
         "message": "NexaTel AI Telecom Support API is running",
-        "version": "6.1.0",
+        "version": "7.1.0",
         "docs": "/docs",
     }
 
@@ -1349,6 +1576,8 @@ def health() -> Dict[str, Any]:
                 SENDGRID_SDK_AVAILABLE and SENDGRID_API_KEY and SENDGRID_FROM_EMAIL
             ),
             "twilio_configured": twilio_is_configured(),
+            "crm_connector_ready": crm_is_configured(),
+            "voice_pipeline_ready": True,
         },
     }
 
@@ -1360,7 +1589,7 @@ def health() -> Dict[str, Any]:
 def signup(request: SignupRequest) -> Dict[str, Any]:
     email = str(request.email).strip().lower()
     name = request.name.strip()
-    phone = (request.phone or "").strip()
+    phone = normalize_phone_number(request.phone)
 
     with users_lock:
         users = read_json_list(USERS_FILE)
@@ -1405,43 +1634,29 @@ def login(request: LoginRequest) -> Dict[str, Any]:
 # =============================================================================
 # CHAT ENDPOINT
 # =============================================================================
+def process_support_turn(*, message: str, session_id: str, topic: Optional[str], channel: str) -> Dict[str,Any]:
+    """Shared context + RAG + LLM pipeline for chat and voice transcripts."""
+    channel=sanitize_channel(channel)
+    issue_state=update_issue_state(session_id,message,topic)
+    issue_state["channel"]=channel
+    rag_docs=rag_engine.search(f"Channel: {channel}\n{message}\n{known_facts_text(issue_state)}",top_k=RAG_TOP_K)
+    reply,provider=generate_response(message,session_id,issue_state,rag_docs)
+    history=conversation_history.setdefault(session_id,[])
+    history.append({"role":"user","content":message}); history.append({"role":"assistant","content":reply})
+    conversation_history[session_id]=history[-MAX_HISTORY_MESSAGES:]
+    issue_state_store[session_id]=issue_state
+    return {"reply":reply,"session_id":session_id,"channel":channel,"provider":provider,"escalation_recommended":bool(issue_state.get("escalation_eligible")),"needs_human_review":bool(issue_state.get("escalation_eligible")),"rag_results":[{"title":d.get("title"),"score":d.get("score")} for d in rag_docs],"issue_state":issue_state}
+
 @app.post("/chat")
-def chat(request: ChatRequest) -> Dict[str, Any]:
-    message = request.message.strip()
-    session_id = request.session_id.strip()
+def chat(request: ChatRequest) -> Dict[str,Any]:
+    return process_support_turn(message=request.message.strip(),session_id=request.session_id.strip(),topic=request.topic,channel=request.channel)
 
-    # Update structured context BEFORE generation.
-    issue_state = update_issue_state(session_id, message, request.topic)
-
-    # Use both the current message and known facts in retrieval.
-    rag_query = f"{message}\n{known_facts_text(issue_state)}"
-    rag_docs = rag_engine.search(rag_query, top_k=RAG_TOP_K)
-
-    # Generate with provider priority NVIDIA -> Gemini -> OpenAI -> fallback.
-    reply, provider = generate_response(message, session_id, issue_state, rag_docs)
-
-    # Add conversation to recent memory after generation so the new user message
-    # is not duplicated in the provider prompt.
-    history = conversation_history.setdefault(session_id, [])
-    history.append({"role": "user", "content": message})
-    history.append({"role": "assistant", "content": reply})
-    conversation_history[session_id] = history[-MAX_HISTORY_MESSAGES:]
-
-    issue_state_store[session_id] = issue_state
-
-    return {
-        "reply": reply,
-        "session_id": session_id,
-        "escalation_recommended": bool(issue_state.get("escalation_eligible")),
-        "needs_human_review": bool(issue_state.get("requires_account_verification")),
-        # Helpful for developer testing; the customer UI does not display these.
-        "provider": provider,
-        "rag_results": [
-            {"title": doc.get("title"), "score": doc.get("score")}
-            for doc in rag_docs
-        ],
-        "issue_state": issue_state,
-    }
+@app.post("/voice/chat")
+def voice_chat(request: VoiceChatRequest) -> Dict[str,Any]:
+    """ASR transcript in; same NexaTel intelligence; provider-neutral TTS text out."""
+    result=process_support_turn(message=request.transcript.strip(),session_id=request.session_id.strip(),topic=request.topic,channel="voice")
+    result["speak_text"]=result["reply"]
+    return result
 
 
 # =============================================================================
@@ -1464,6 +1679,10 @@ def create_support_request(
     )
     now = datetime.now(timezone.utc).isoformat()
 
+    normalized_channel=sanitize_channel(request.channel)
+    session_issue_state=issue_state_store.get(request.session_id,{})
+    agent_summary=build_agent_case_summary(request,session_issue_state)
+
     ticket = {
         "ticket_id": ticket_id,
         "session_id": request.session_id,
@@ -1471,9 +1690,11 @@ def create_support_request(
         "user_id": request.user_id,
         "customer_name": request.customer_name,
         "customer_email": str(request.customer_email) if request.customer_email else None,
-        "customer_phone": request.customer_phone,
+        "customer_phone": normalize_phone_number(request.customer_phone),
         "reason": request.reason.strip(),
         "contact_preference": preference,
+        "channel": normalized_channel,
+        "ai_summary": agent_summary,
         "status": "waiting",
         "priority": determine_priority(request.reason, request.conversation),
         "conversation": [model_to_dict(item) for item in request.conversation],
@@ -1481,7 +1702,13 @@ def create_support_request(
         "updated_at": now,
         "call_sid": None,
         "call_started_at": None,
+        "crm_sync_status": "pending",
+        "external_ticket_id": None,
     }
+
+    crm_result=create_or_sync_crm_ticket(ticket)
+    ticket["crm_sync_status"]="synced" if crm_result.get("synced") else crm_result.get("mode","internal")
+    ticket["external_ticket_id"]=crm_result.get("external_ticket_id")
 
     with support_lock:
         tickets = read_json_list(SUPPORT_REQUESTS_FILE)
@@ -1503,6 +1730,8 @@ def create_support_request(
         "request_id": ticket_id,
         "status": "waiting",
         "priority": ticket["priority"],
+        "channel": normalized_channel,
+        "crm_sync_status": ticket["crm_sync_status"],
         "callback_started": False,
     }
 
@@ -1595,7 +1824,7 @@ def initiate_support_callback(
         if ticket.get("contact_preference") != "callback":
             raise HTTPException(status_code=400, detail="This customer did not request a callback.")
 
-        customer_phone = (ticket.get("customer_phone") or "").strip()
+        customer_phone = normalize_phone_number(ticket.get("customer_phone"))
 
         if not valid_e164_phone(customer_phone):
             raise HTTPException(
@@ -1655,13 +1884,14 @@ def initiate_support_callback(
 def startup_message() -> None:
     print()
     print("=" * 78)
-    print("NEXATEL AI TELECOM SUPPORT - BACKEND 6.1")
+    print("NEXATEL AI TELECOM SUPPORT - BACKEND 7.1")
     print("=" * 78)
     print("Swagger: http://127.0.0.1:8000/docs")
     print(f"NVIDIA configured : {bool(OPENAI_COMPATIBLE_SDK_AVAILABLE and NVIDIA_API_KEY)}")
     print(f"NVIDIA chat model : {NVIDIA_CHAT_MODEL}")
     print(f"NVIDIA embed model: {NVIDIA_EMBEDDING_MODEL}")
     print(f"Gemini configured : {bool(GEMINI_SDK_AVAILABLE and GEMINI_API_KEY)}")
+    print(f"Gemini model      : {GEMINI_MODEL}")
     print(f"OpenAI configured : {bool(OPENAI_COMPATIBLE_SDK_AVAILABLE and OPENAI_API_KEY)}")
     print(
         "Vector RAG ready   : "
@@ -1672,5 +1902,7 @@ def startup_message() -> None:
     print(f"SendGrid configured: {bool(SENDGRID_SDK_AVAILABLE and SENDGRID_API_KEY and SENDGRID_FROM_EMAIL)}")
     print(f"Twilio configured : {twilio_is_configured()}")
     print("Provider priority : NVIDIA -> Gemini -> OpenAI -> fallback")
+    print("Channels          : chat + voice transcript pipeline")
+    print(f"CRM connector     : {crm_is_configured()}")
     print("=" * 78)
     print()

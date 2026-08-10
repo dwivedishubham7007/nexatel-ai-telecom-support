@@ -427,6 +427,8 @@
              "No issue description provided."
            )}
          </div>
+
+        <span class="ticket-channel ${String(ticket.channel||"chat").toLowerCase()==="voice"?"voice":""}">${escapeHtml(String(ticket.channel||"chat").toUpperCase())}</span>
  
        `;
  
@@ -595,6 +597,11 @@
        ticket.contact_preference
      )
    );
+
+  const channel=String(ticket.channel||"chat").trim().toLowerCase();
+  setText("detailChannel",channel==="voice"?"Voice":"Chat");
+  setText("detailCrmStatus",ticket.external_ticket_id?`Synced · ${ticket.external_ticket_id}`:prettyCrmStatus(ticket.crm_sync_status));
+  renderAgentSummary(ticket);
  
  
    setText(
@@ -1438,3 +1445,7 @@
    return div.innerHTML;
  
  }
+
+/* ================= AI AGENT HANDOFF SUMMARY ================= */
+function renderAgentSummary(ticket){const summary=ticket.ai_summary||{};const channel=String(summary.channel||ticket.channel||"chat").trim().toLowerCase();setText("detailSummaryIssue",summary.issue||"General support");setText("detailEscalationReason",summary.escalation_reason||ticket.reason||"Agent review requested.");setText("detailRecommendedAction",summary.recommended_action||"Review the transcript and continue from where AI troubleshooting stopped.");const badge=$("detailSummaryChannel");if(badge){badge.textContent=channel==="voice"?"☎ Voice":"💬 Chat";badge.classList.toggle("voice",channel==="voice");}const list=$("detailKnownFacts");if(!list)return;list.innerHTML="";const facts=Array.isArray(summary.known_facts)&&summary.known_facts.length?summary.known_facts:["No additional structured facts were captured."];facts.forEach(f=>{const li=document.createElement("li");li.textContent=f;list.appendChild(li);});}
+function prettyCrmStatus(value){const v=String(value||"internal").trim().toLowerCase();return {internal:"Internal queue",pending:"Pending",synced:"Synced",webhook:"Webhook connector",failed:"Internal only"}[v]||v;}
